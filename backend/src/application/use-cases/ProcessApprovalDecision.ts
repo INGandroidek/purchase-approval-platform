@@ -2,7 +2,6 @@ import { ApproverRepository } from '../ports/ApproverRepository.js';
 import { PurchaseRequestRepository } from '../ports/PurchaseRequestRepository.js';
 
 import { Approver } from '../../domain/entities/Approver.js';
-import { PurchaseRequest } from '../../domain/entities/PurchaseRequest.js';
 
 import { ApprovalStatus } from '../../domain/enums/ApprovalStatus.js';
 import { PurchaseStatus } from '../../domain/enums/PurchaseStatus.js';
@@ -56,6 +55,40 @@ export class ProcessApprovalDecision {
     }
 
     /*
+     * Load the purchase request before allowing
+     * any approval decision.
+     */
+    const result =
+      await this.purchaseRequestRepository.findById(
+        approver.requestId,
+      );
+
+    if (!result) {
+      throw new Error(
+        'Purchase request not found',
+      );
+    }
+
+    const {
+      purchaseRequest,
+      approvers,
+    } = result;
+
+    /*
+     * A purchase request is immutable from the
+     * approval perspective once it has been
+     * completed or rejected.
+     */
+    if (
+      purchaseRequest.status !==
+      PurchaseStatus.PENDING
+    ) {
+      throw new Error(
+        'Purchase request has already been decided',
+      );
+    }
+
+    /*
      * The approver must verify the OTP before
      * being allowed to make an approval decision.
      */
@@ -68,11 +101,6 @@ export class ProcessApprovalDecision {
     /*
      * The OTP verification must have happened
      * while the OTP was still valid.
-     *
-     * Normally this condition is guaranteed by
-     * Approver.verifyOtp(), but we keep the
-     * validation here as an additional domain
-     * protection before processing the decision.
      */
     const otpVerificationTime =
       new Date(
@@ -93,6 +121,9 @@ export class ProcessApprovalDecision {
       );
     }
 
+    /*
+     * An approver can make only one decision.
+     */
     if (
       approver.status !==
       ApprovalStatus.PENDING
@@ -107,28 +138,15 @@ export class ProcessApprovalDecision {
         ? approver.sign()
         : approver.reject();
 
+    /*
+     * Persist the approver decision.
+     */
     await this.approverRepository.update(
       updatedApprover,
     );
 
-    const result =
-      await this.purchaseRequestRepository.findById(
-        updatedApprover.requestId,
-      );
-
-    if (!result) {
-      throw new Error(
-        'Purchase request not found',
-      );
-    }
-
-    const {
-      purchaseRequest,
-      approvers,
-    } = result;
-
-    let purchaseRequestStatus =
-      purchaseRequest.status;
+    let updatedPurchaseRequest =
+      purchaseRequest;
 
     /*
      * A single rejection immediately rejects
@@ -137,17 +155,16 @@ export class ProcessApprovalDecision {
     if (
       decision === 'REJECTED'
     ) {
-      purchaseRequestStatus =
-        PurchaseStatus.REJECTED;
+      updatedPurchaseRequest =
+        purchaseRequest.reject();
     } else {
       /*
        * The purchase request is completed only
-       * when all three approvers have signed.
+       * when every approver has signed.
        *
        * The repository contains the previous
-       * state of the current approver, so we
-       * explicitly use updatedApprover for the
-       * current decision.
+       * state of the current approver, so the
+       * updated approver is explicitly used here.
        */
       const allApprovalsCompleted =
         approvers.every(
@@ -160,37 +177,19 @@ export class ProcessApprovalDecision {
         );
 
       if (allApprovalsCompleted) {
-        purchaseRequestStatus =
-          PurchaseStatus.COMPLETED;
+        updatedPurchaseRequest =
+          purchaseRequest.complete();
       }
     }
 
     /*
-     * Only persist the purchase request when
+     * Persist the purchase request only when
      * its status actually changes.
      */
     if (
-      purchaseRequestStatus !==
+      updatedPurchaseRequest.status !==
       purchaseRequest.status
     ) {
-      const updatedPurchaseRequest =
-        PurchaseRequest.create({
-          id: purchaseRequest.id,
-          title: purchaseRequest.title,
-          description:
-            purchaseRequest.description,
-          amount: purchaseRequest.amount,
-          requesterName:
-            purchaseRequest.requesterName,
-          requesterEmail:
-            purchaseRequest.requesterEmail,
-          status: purchaseRequestStatus,
-          createdAt:
-            purchaseRequest.createdAt,
-          updatedAt:
-            new Date().toISOString(),
-        });
-
       await this.purchaseRequestRepository.update(
         updatedPurchaseRequest,
       );
@@ -202,7 +201,8 @@ export class ProcessApprovalDecision {
       status: updatedApprover.status,
       signedAt:
         updatedApprover.signedAt!,
-      purchaseRequestStatus,
+      purchaseRequestStatus:
+        updatedPurchaseRequest.status,
     };
   }
 }

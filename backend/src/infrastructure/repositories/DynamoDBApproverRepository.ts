@@ -32,40 +32,57 @@ export class DynamoDBApproverRepository
     }
   }
 
-  async update(
+    async update(
     approver: Approver,
-  ): Promise<void> {
+    ): Promise<void> {
+    const updateExpressions = [
+        '#status = :status',
+        'otp = :otp',
+        'otpExpiresAt = :otpExpiresAt',
+        'otpVerifiedAt = :otpVerifiedAt',
+    ];
+
+    const expressionAttributeValues: Record<
+        string,
+        unknown
+    > = {
+        ':status': approver.status,
+        ':otp': approver.otp,
+        ':otpExpiresAt': approver.otpExpiresAt,
+        ':otpVerifiedAt': approver.otpVerifiedAt,
+    };
+
+    if (approver.signedAt) {
+        updateExpressions.push(
+        'signedAt = :signedAt',
+        );
+
+        expressionAttributeValues[':signedAt'] =
+        approver.signedAt;
+    }
+
     await dynamoDBDocumentClient.send(
-      new UpdateCommand({
+        new UpdateCommand({
         TableName: TABLE_NAME,
 
         Key: {
-          PK: `REQUEST#${approver.requestId}`,
-          SK: `APPROVER#${approver.id}`,
+            PK: `REQUEST#${approver.requestId}`,
+            SK: `APPROVER#${approver.id}`,
         },
 
         UpdateExpression: `
-          SET #status = :status,
-              otp = :otp,
-              otpExpiresAt = :otpExpiresAt,
-              otpVerifiedAt = :otpVerifiedAt,
-              signedAt = :signedAt
+            SET ${updateExpressions.join(', ')}
         `,
 
         ExpressionAttributeNames: {
-          '#status': 'status',
+            '#status': 'status',
         },
 
-        ExpressionAttributeValues: {
-          ':status': approver.status,
-          ':otp': approver.otp,
-          ':otpExpiresAt': approver.otpExpiresAt,
-            ':otpVerifiedAt': approver.otpVerifiedAt,
-          ':signedAt': approver.signedAt,
-        },
-      }),
+        ExpressionAttributeValues:
+            expressionAttributeValues,
+        }),
     );
-  }
+    }
 
   async findByRequestId(
     requestId: string,

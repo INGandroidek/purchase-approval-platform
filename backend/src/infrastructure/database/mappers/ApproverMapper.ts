@@ -35,38 +35,38 @@ export class ApproverMapper {
     approver: Approver,
   ): ApproverItem {
     return {
-      PK: `REQUEST#${approver.requestId}`,
-      SK: `APPROVER#${approver.id}`,
+    PK: `REQUEST#${approver.requestId}`,
+    SK: `APPROVER#${approver.id}`,
 
-      GSI1PK: `APPROVER_TOKEN#${approver.token}`,
-      GSI1SK: 'APPROVER',
+    GSI1PK: `APPROVER_TOKEN#${approver.token}`,
+    GSI1SK: 'APPROVER',
 
-      GSI2PK: `APPROVER#${approver.id}`,
-      GSI2SK: 'APPROVER',
+    GSI2PK: `APPROVER#${approver.id}`,
+    GSI2SK: 'APPROVER',
 
-      entityType: 'Approver',
+    entityType: 'Approver',
 
-      id: approver.id,
-      requestId: approver.requestId,
-      name: approver.name,
-      email: approver.email,
-      role: approver.role,
-      token: approver.token,
-      otp: approver.otp,
-      otpExpiresAt: approver.otpExpiresAt,
-      otpVerifiedAt: approver.otpVerifiedAt,
-      status: approver.status,
+    id: approver.id,
+    requestId: approver.requestId,
+    name: approver.name,
+    email: approver.email,
+    role: approver.role,
+    token: approver.token,
+    otp: approver.otp,
+    otpExpiresAt: approver.otpExpiresAt,
+    status: approver.status,
 
-      ...(approver.signedAt
-        ? {
-            signedAt: approver.signedAt,
-          }
-        : {}),
-        ...(approver.otpVerifiedAt
+    ...(approver.otpVerifiedAt
         ? {
             otpVerifiedAt:
-                approver.otpVerifiedAt,
-            }
+            approver.otpVerifiedAt,
+        }
+        : {}),
+
+    ...(approver.signedAt
+        ? {
+            signedAt: approver.signedAt,
+        }
         : {}),
     };
   }

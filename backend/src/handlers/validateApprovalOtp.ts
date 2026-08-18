@@ -3,6 +3,7 @@ import {
   APIGatewayProxyResult,
 } from 'aws-lambda';
 
+import { corsHeaders } from './cors.js';
 import { ValidateApprovalOtp } from '../application/use-cases/ValidateApprovalOtp.js';
 import { DynamoDBApproverRepository } from '../infrastructure/repositories/DynamoDBApproverRepository.js';
 
@@ -24,9 +25,7 @@ export async function handler(
     if (!token) {
       return {
         statusCode: 400,
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: corsHeaders,
         body: JSON.stringify({
           message:
             'Approver token is required',
@@ -37,9 +36,7 @@ export async function handler(
     if (!event.body) {
       return {
         statusCode: 400,
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: corsHeaders,
         body: JSON.stringify({
           message:
             'Request body is required',
@@ -59,9 +56,7 @@ export async function handler(
 
     return {
       statusCode: 200,
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: corsHeaders,
       body: JSON.stringify(result),
     };
   } catch (error) {
@@ -69,9 +64,7 @@ export async function handler(
 
     return {
       statusCode: 400,
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: corsHeaders,
       body: JSON.stringify({
         message:
           error instanceof Error

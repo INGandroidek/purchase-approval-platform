@@ -3,6 +3,7 @@ import {
   APIGatewayProxyResult,
 } from 'aws-lambda';
 
+import { corsHeaders } from './cors.js';
 import { CreatePurchaseRequest } from '../application/use-cases/CreatePurchaseRequest.js';
 import { DynamoDBPurchaseRequestRepository } from '../infrastructure/repositories/DynamoDBPurchaseRequestRepository.js';
 import { CryptoTokenGenerator } from '../infrastructure/services/CryptoTokenGenerator.js';
@@ -31,9 +32,7 @@ export async function handler(
     if (!event.body) {
       return {
         statusCode: 400,
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: corsHeaders,
         body: JSON.stringify({
           message: 'Request body is required',
         }),
@@ -49,9 +48,7 @@ export async function handler(
 
     return {
       statusCode: 201,
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: corsHeaders,
       body: JSON.stringify({
         request: {
           id: result.request.id,
@@ -90,9 +87,7 @@ export async function handler(
 
     return {
       statusCode: 400,
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: corsHeaders,
       body: JSON.stringify({
         message:
           error instanceof Error

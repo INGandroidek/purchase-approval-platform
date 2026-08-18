@@ -24,7 +24,7 @@ export class CreatePurchaseRequest {
   async execute(
     input: CreatePurchaseRequestInput,
   ): Promise<CreatedPurchaseRequest> {
-    if (input.approvers.length !== 3) {
+    if (!input.approvers || input.approvers.length !== 3) {
       throw new Error('Exactly 3 approvers are required');
     }
 
