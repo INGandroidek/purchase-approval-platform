@@ -39,11 +39,12 @@ export class ValidateApprovalOtp {
       );
     }
 
-    if (!approver.isOtpValid(otp)) {
-      throw new Error(
-        'Invalid or expired OTP',
-      );
-    }
+    const verifiedApprover =
+    approver.verifyOtp(otp);
+
+    await this.approverRepository.update(
+    verifiedApprover,
+    );
 
     return {
       approverId: approver.id,

@@ -1,6 +1,7 @@
 import {
   PutCommand,
   QueryCommand,
+  UpdateCommand,
 } from '@aws-sdk/lib-dynamodb';
 
 import { Approver } from '../../domain/entities/Approver.js';
@@ -108,4 +109,33 @@ export class DynamoDBPurchaseRequestRepository
     // el GSI necesario para esta consulta.
     return [];
   }
+
+  async update(
+    purchaseRequest: PurchaseRequest,
+    ): Promise<void> {
+    await dynamoDBDocumentClient.send(
+        new UpdateCommand({
+        TableName: TABLE_NAME,
+
+        Key: {
+            PK: `REQUEST#${purchaseRequest.id}`,
+            SK: 'REQUEST',
+        },
+
+        UpdateExpression: `
+            SET #status = :status,
+                updatedAt = :updatedAt
+        `,
+
+        ExpressionAttributeNames: {
+            '#status': 'status',
+        },
+
+        ExpressionAttributeValues: {
+            ':status': purchaseRequest.status,
+            ':updatedAt': purchaseRequest.updatedAt,
+        },
+        }),
+    );
+    }
 }

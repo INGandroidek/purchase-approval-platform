@@ -5,8 +5,13 @@ import {
 } from '@jest/globals';
 
 import { Approver } from '../src/domain/entities/Approver.js';
+import { PurchaseRequest } from '../src/domain/entities/PurchaseRequest.js';
 import { ApprovalStatus } from '../src/domain/enums/ApprovalStatus.js';
+import { PurchaseStatus } from '../src/domain/enums/PurchaseStatus.js';
+
 import { ApproverRepository } from '../src/application/ports/ApproverRepository.js';
+import { PurchaseRequestRepository } from '../src/application/ports/PurchaseRequestRepository.js';
+
 import { ProcessApprovalDecision } from '../src/application/use-cases/ProcessApprovalDecision.js';
 
 class InMemoryApproverRepository
@@ -28,21 +33,20 @@ class InMemoryApproverRepository
 
   async findById(
     id: string,
-    ): Promise<Approver | null> {
+  ): Promise<Approver | null> {
     return (
-        [...this.approvers.values()].find(
+      [...this.approvers.values()].find(
         (approver) =>
-            approver.id === id,
-        ) ?? null
+          approver.id === id,
+      ) ?? null
     );
-    }
+  }
 
   async findByToken(
     token: string,
   ): Promise<Approver | null> {
     return (
-      this.approvers.get(token) ??
-      null
+      this.approvers.get(token) ?? null
     );
   }
 
@@ -67,11 +71,104 @@ class InMemoryApproverRepository
   }
 }
 
-const createApprover = (
+class InMemoryPurchaseRequestRepository
+  implements PurchaseRequestRepository
+{
+  private readonly requests =
+    new Map<
+      string,
+      {
+        purchaseRequest: PurchaseRequest;
+        approvers: Approver[];
+      }
+    >();
+
+  async save(
+    purchaseRequest: PurchaseRequest,
+    approvers: Approver[],
+  ): Promise<void> {
+    this.requests.set(
+      purchaseRequest.id,
+      {
+        purchaseRequest,
+        approvers,
+      },
+    );
+  }
+
+  async update(
+    purchaseRequest: PurchaseRequest,
+  ): Promise<void> {
+    const existing =
+      this.requests.get(
+        purchaseRequest.id,
+      );
+
+    this.requests.set(
+      purchaseRequest.id,
+      {
+        purchaseRequest,
+        approvers:
+          existing?.approvers ?? [],
+      },
+    );
+  }
+
+  async findById(
+    id: string,
+  ): Promise<{
+    purchaseRequest: PurchaseRequest;
+    approvers: Approver[];
+  } | null> {
+    return (
+      this.requests.get(id) ?? null
+    );
+  }
+
+  async findByRequesterEmail(
+    email: string,
+  ): Promise<PurchaseRequest[]> {
+    return [
+      ...this.requests.values(),
+    ]
+      .filter(
+        ({ purchaseRequest }) =>
+          purchaseRequest.requesterEmail ===
+          email,
+      )
+      .map(
+        ({ purchaseRequest }) =>
+          purchaseRequest,
+      );
+  }
+}
+
+function createPurchaseRequest(
+  status: PurchaseStatus =
+    PurchaseStatus.PENDING,
+): PurchaseRequest {
+  return PurchaseRequest.create({
+    id: 'request-123',
+    title: 'Compra de computadores',
+    description:
+      'Compra de equipos para desarrollo',
+    amount: 5000000,
+    requesterName: 'Diego',
+    requesterEmail:
+      'diego@example.com',
+    status,
+    createdAt:
+      new Date().toISOString(),
+    updatedAt:
+      new Date().toISOString(),
+  });
+}
+
+function createApprover(
   status: ApprovalStatus =
     ApprovalStatus.PENDING,
-): Approver =>
-  Approver.create({
+): Approver {
+  return Approver.create({
     id: 'approver-123',
     requestId: 'request-123',
     name: 'Carlos',
@@ -79,25 +176,62 @@ const createApprover = (
     role: 'FINANCE',
     token: 'token-123',
     otp: '123456',
-    otpExpiresAt: new Date(
-      Date.now() + 3 * 60 * 1000,
-    ).toISOString(),
+    otpExpiresAt:
+      new Date(
+        Date.now() + 180000,
+      ).toISOString(),
     status,
+
+    // El OTP se considera validado para
+    // los tests que prueban exclusivamente
+    // la decisión de aprobación.
+    otpVerifiedAt:
+      new Date().toISOString(),
   });
+}
+
+function createUseCase() {
+  const approverRepository =
+    new InMemoryApproverRepository();
+
+  const purchaseRequestRepository =
+    new InMemoryPurchaseRequestRepository();
+
+  const useCase =
+    new ProcessApprovalDecision(
+      approverRepository,
+      purchaseRequestRepository,
+    );
+
+  return {
+    approverRepository,
+    purchaseRequestRepository,
+    useCase,
+  };
+}
 
 describe('ProcessApprovalDecision', () => {
   it('should approve a pending approval', async () => {
-    const repository =
-      new InMemoryApproverRepository();
+    const {
+      approverRepository,
+      purchaseRequestRepository,
+      useCase,
+    } = createUseCase();
 
-    await repository.saveMany([
-      createApprover(),
+    const request =
+      createPurchaseRequest();
+
+    const approver =
+      createApprover();
+
+    await purchaseRequestRepository.save(
+      request,
+      [approver],
+    );
+
+    await approverRepository.saveMany([
+      approver,
     ]);
-
-    const useCase =
-      new ProcessApprovalDecision(
-        repository,
-      );
 
     const result =
       await useCase.execute(
@@ -118,20 +252,42 @@ describe('ProcessApprovalDecision', () => {
     );
 
     expect(result.signedAt).toBeDefined();
+
+    expect(
+      result.purchaseRequestStatus,
+    ).toBe(PurchaseStatus.COMPLETED);
+
+    const updatedRequest =
+      await purchaseRequestRepository.findById(
+        'request-123',
+      );
+
+    expect(
+      updatedRequest?.purchaseRequest.status,
+    ).toBe(PurchaseStatus.COMPLETED);
   });
 
   it('should reject a pending approval', async () => {
-    const repository =
-      new InMemoryApproverRepository();
+    const {
+      approverRepository,
+      purchaseRequestRepository,
+      useCase,
+    } = createUseCase();
 
-    await repository.saveMany([
-      createApprover(),
+    const request =
+      createPurchaseRequest();
+
+    const approver =
+      createApprover();
+
+    await purchaseRequestRepository.save(
+      request,
+      [approver],
+    );
+
+    await approverRepository.saveMany([
+      approver,
     ]);
-
-    const useCase =
-      new ProcessApprovalDecision(
-        repository,
-      );
 
     const result =
       await useCase.execute(
@@ -139,18 +295,38 @@ describe('ProcessApprovalDecision', () => {
         'REJECTED',
       );
 
+    expect(result.approverId).toBe(
+      'approver-123',
+    );
+
+    expect(result.requestId).toBe(
+      'request-123',
+    );
+
     expect(result.status).toBe(
       ApprovalStatus.REJECTED,
     );
 
     expect(result.signedAt).toBeDefined();
+
+    expect(
+      result.purchaseRequestStatus,
+    ).toBe(PurchaseStatus.REJECTED);
+
+    const updatedRequest =
+      await purchaseRequestRepository.findById(
+        'request-123',
+      );
+
+    expect(
+      updatedRequest?.purchaseRequest.status,
+    ).toBe(PurchaseStatus.REJECTED);
   });
 
   it('should reject an empty token', async () => {
-    const useCase =
-      new ProcessApprovalDecision(
-        new InMemoryApproverRepository(),
-      );
+    const {
+      useCase,
+    } = createUseCase();
 
     await expect(
       useCase.execute(
@@ -163,10 +339,9 @@ describe('ProcessApprovalDecision', () => {
   });
 
   it('should reject an invalid token', async () => {
-    const useCase =
-      new ProcessApprovalDecision(
-        new InMemoryApproverRepository(),
-      );
+    const {
+      useCase,
+    } = createUseCase();
 
     await expect(
       useCase.execute(
@@ -179,47 +354,93 @@ describe('ProcessApprovalDecision', () => {
   });
 
   it('should reject an invalid decision', async () => {
-    const repository =
-      new InMemoryApproverRepository();
-
-    await repository.saveMany([
-      createApprover(),
-    ]);
-
-    const useCase =
-      new ProcessApprovalDecision(
-        repository,
-      );
+    const {
+      useCase,
+    } = createUseCase();
 
     await expect(
       useCase.execute(
         'token-123',
-        'INVALID' as 'APPROVED',
+        'INVALID' as any,
       ),
     ).rejects.toThrow(
       'Invalid approval decision',
     );
   });
 
-  it('should reject a second decision', async () => {
-    const repository =
-      new InMemoryApproverRepository();
+  it('should reject a decision when OTP has not been verified', async () => {
+    const {
+      approverRepository,
+      purchaseRequestRepository,
+      useCase,
+    } = createUseCase();
 
-    await repository.saveMany([
-      createApprover(
-        ApprovalStatus.SIGNED,
-      ),
+    const request =
+      createPurchaseRequest();
+
+    const approver =
+      Approver.create({
+        id: 'approver-123',
+        requestId: 'request-123',
+        name: 'Carlos',
+        email: 'carlos@example.com',
+        role: 'FINANCE',
+        token: 'token-123',
+        otp: '123456',
+        otpExpiresAt:
+          new Date(
+            Date.now() + 180000,
+          ).toISOString(),
+        status: ApprovalStatus.PENDING,
+      });
+
+    await purchaseRequestRepository.save(
+      request,
+      [approver],
+    );
+
+    await approverRepository.saveMany([
+      approver,
     ]);
-
-    const useCase =
-      new ProcessApprovalDecision(
-        repository,
-      );
 
     await expect(
       useCase.execute(
         'token-123',
-        'REJECTED',
+        'APPROVED',
+      ),
+    ).rejects.toThrow(
+      'OTP verification is required',
+    );
+  });
+
+  it('should reject a decision for an approval that was already processed', async () => {
+    const {
+      approverRepository,
+      purchaseRequestRepository,
+      useCase,
+    } = createUseCase();
+
+    const request =
+      createPurchaseRequest();
+
+    const approver =
+      createApprover(
+        ApprovalStatus.SIGNED,
+      );
+
+    await purchaseRequestRepository.save(
+      request,
+      [approver],
+    );
+
+    await approverRepository.saveMany([
+      approver,
+    ]);
+
+    await expect(
+      useCase.execute(
+        'token-123',
+        'APPROVED',
       ),
     ).rejects.toThrow(
       'Approval decision has already been made',

@@ -25,6 +25,7 @@ export interface ApproverItem {
   token: string;
   otp: string;
   otpExpiresAt: string;
+  otpVerifiedAt?: string;
   status: ApprovalStatus;
   signedAt?: string;
 }
@@ -53,12 +54,19 @@ export class ApproverMapper {
       token: approver.token,
       otp: approver.otp,
       otpExpiresAt: approver.otpExpiresAt,
+      otpVerifiedAt: approver.otpVerifiedAt,
       status: approver.status,
 
       ...(approver.signedAt
         ? {
             signedAt: approver.signedAt,
           }
+        : {}),
+        ...(approver.otpVerifiedAt
+        ? {
+            otpVerifiedAt:
+                approver.otpVerifiedAt,
+            }
         : {}),
     };
   }
@@ -75,6 +83,7 @@ export class ApproverMapper {
       token: item.token,
       otp: item.otp,
       otpExpiresAt: item.otpExpiresAt,
+      otpVerifiedAt: item.otpVerifiedAt,
       status: item.status,
       signedAt: item.signedAt,
     };

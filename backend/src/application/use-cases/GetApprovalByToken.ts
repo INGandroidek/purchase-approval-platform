@@ -8,7 +8,10 @@ export interface ApprovalDetails {
     description: string;
     amount: number;
     requesterName: string;
+    requesterEmail: string;
+    status: string;
     createdAt: string;
+    updatedAt: string;
   };
 
   approver: {
@@ -54,8 +57,15 @@ export class GetApprovalByToken {
         title: result.purchaseRequest.title,
         description: result.purchaseRequest.description,
         amount: result.purchaseRequest.amount,
-        requesterName: result.purchaseRequest.requesterName,
-        createdAt: result.purchaseRequest.createdAt,
+        requesterName:
+          result.purchaseRequest.requesterName,
+        requesterEmail:
+          result.purchaseRequest.requesterEmail,
+        status: result.purchaseRequest.status,
+        createdAt:
+          result.purchaseRequest.createdAt,
+        updatedAt:
+          result.purchaseRequest.updatedAt,
       },
 
       approver: {

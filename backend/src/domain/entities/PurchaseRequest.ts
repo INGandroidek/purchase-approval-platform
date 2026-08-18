@@ -17,29 +17,43 @@ export class PurchaseRequest {
     private readonly props: PurchaseRequestProps,
   ) {}
 
-  public static create(props: PurchaseRequestProps): PurchaseRequest {
+  public static create(
+    props: PurchaseRequestProps,
+  ): PurchaseRequest {
     if (!props.id.trim()) {
-      throw new Error('Purchase request id is required');
+      throw new Error(
+        'Purchase request id is required',
+      );
     }
 
     if (!props.title.trim()) {
-      throw new Error('Purchase request title is required');
+      throw new Error(
+        'Purchase request title is required',
+      );
     }
 
     if (!props.description.trim()) {
-      throw new Error('Purchase request description is required');
+      throw new Error(
+        'Purchase request description is required',
+      );
     }
 
     if (props.amount <= 0) {
-      throw new Error('Purchase request amount must be greater than zero');
+      throw new Error(
+        'Purchase request amount must be greater than zero',
+      );
     }
 
     if (!props.requesterName.trim()) {
-      throw new Error('Requester name is required');
+      throw new Error(
+        'Requester name is required',
+      );
     }
 
     if (!props.requesterEmail.trim()) {
-      throw new Error('Requester email is required');
+      throw new Error(
+        'Requester email is required',
+      );
     }
 
     return new PurchaseRequest(props);
@@ -79,5 +93,39 @@ export class PurchaseRequest {
 
   public get updatedAt(): string {
     return this.props.updatedAt;
+  }
+
+  public complete(): PurchaseRequest {
+    if (
+      this.props.status !==
+      PurchaseStatus.PENDING
+    ) {
+      throw new Error(
+        'Purchase request has already been decided',
+      );
+    }
+
+    return new PurchaseRequest({
+      ...this.props,
+      status: PurchaseStatus.COMPLETED,
+      updatedAt: new Date().toISOString(),
+    });
+  }
+
+  public reject(): PurchaseRequest {
+    if (
+      this.props.status !==
+      PurchaseStatus.PENDING
+    ) {
+      throw new Error(
+        'Purchase request has already been decided',
+      );
+    }
+
+    return new PurchaseRequest({
+      ...this.props,
+      status: PurchaseStatus.REJECTED,
+      updatedAt: new Date().toISOString(),
+    });
   }
 }

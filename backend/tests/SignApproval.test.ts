@@ -85,6 +85,7 @@ class InMemoryPurchaseRequestRepository
   > {
     return [];
   }
+  async update(): Promise<void> {}
 }
 
 describe('SignApproval', () => {

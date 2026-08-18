@@ -56,6 +56,9 @@ importers:
       constructs:
         specifier: ^10.5.0
         version: 10.8.1
+      esbuild:
+        specifier: ^0.28.2
+        version: 0.28.2
     devDependencies:
       '@swc/core':
         specifier: ^1.15.0

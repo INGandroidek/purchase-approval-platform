@@ -9,6 +9,7 @@ export interface ApproverProps {
   token: string;
   otp: string;
   otpExpiresAt: string;
+  otpVerifiedAt?: string;
   status: ApprovalStatus;
   signedAt?: string;
 }
@@ -62,6 +63,10 @@ export class Approver {
     return this.props.signedAt;
   }
 
+  get otpVerifiedAt(): string | undefined {
+    return this.props.otpVerifiedAt;
+  }
+
   public isOtpValid(otp: string): boolean {
     if (otp !== this.props.otp) {
       return false;
@@ -99,6 +104,20 @@ export class Approver {
       ...this.props,
       status: ApprovalStatus.REJECTED,
       signedAt: new Date().toISOString(),
+    });
+  }
+
+  public verifyOtp(otp: string): Approver {
+    if (!this.isOtpValid(otp)) {
+      throw new Error(
+        'Invalid or expired OTP',
+      );
+    }
+
+    return new Approver({
+      ...this.props,
+      otpVerifiedAt:
+        new Date().toISOString(),
     });
   }
 }

@@ -48,6 +48,7 @@ export class DynamoDBApproverRepository
           SET #status = :status,
               otp = :otp,
               otpExpiresAt = :otpExpiresAt,
+              otpVerifiedAt = :otpVerifiedAt,
               signedAt = :signedAt
         `,
 
@@ -59,6 +60,7 @@ export class DynamoDBApproverRepository
           ':status': approver.status,
           ':otp': approver.otp,
           ':otpExpiresAt': approver.otpExpiresAt,
+            ':otpVerifiedAt': approver.otpVerifiedAt,
           ':signedAt': approver.signedAt,
         },
       }),

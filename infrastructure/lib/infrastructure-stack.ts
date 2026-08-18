@@ -1,6 +1,10 @@
 import * as cdk from 'aws-cdk-lib';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
+import * as lambda from 'aws-cdk-lib/aws-lambda';
+import * as apigateway from 'aws-cdk-lib/aws-apigateway';
+import * as nodejs from 'aws-cdk-lib/aws-lambda-nodejs';
 import { Construct } from 'constructs';
+import * as path from 'node:path';
 
 export class InfrastructureStack extends cdk.Stack {
   constructor(
@@ -9,6 +13,12 @@ export class InfrastructureStack extends cdk.Stack {
     props?: cdk.StackProps,
   ) {
     super(scope, id, props);
+
+    /*
+     * ============================================================
+     * DynamoDB
+     * ============================================================
+     */
 
     const purchaseApprovalTable =
       new dynamodb.Table(
@@ -40,11 +50,11 @@ export class InfrastructureStack extends cdk.Stack {
       );
 
     /*
-     * GSI used by DynamoDBApproverRepository.findByToken()
-     *
-     * GSI1PK = APPROVER_TOKEN#{token}
-     * GSI1SK = APPROVER
+     * ============================================================
+     * Global Secondary Indexes
+     * ============================================================
      */
+
     purchaseApprovalTable.addGlobalSecondaryIndex({
       indexName: 'ApproverTokenIndex',
 
@@ -62,11 +72,6 @@ export class InfrastructureStack extends cdk.Stack {
         dynamodb.ProjectionType.ALL,
     });
 
-    /*
-     * GSI used by DynamoDBApproverRepository.findById()
-     *
-     * GSI2PK = APPROVER#{id}
-     */
     purchaseApprovalTable.addGlobalSecondaryIndex({
       indexName: 'ApproverIdIndex',
 
@@ -78,6 +83,266 @@ export class InfrastructureStack extends cdk.Stack {
       projectionType:
         dynamodb.ProjectionType.ALL,
     });
+
+    /*
+     * ============================================================
+     * Lambda - Create Purchase Request
+     * ============================================================
+     */
+
+    const createPurchaseRequestLambda =
+      new nodejs.NodejsFunction(
+        this,
+        'CreatePurchaseRequestLambda',
+        {
+          runtime:
+            lambda.Runtime.NODEJS_24_X,
+
+          entry: path.join(
+            __dirname,
+            '../../backend/src/handlers/createPurchaseRequest.ts',
+          ),
+
+          handler: 'handler',
+
+          environment: {
+            PURCHASE_APPROVAL_TABLE_NAME:
+              purchaseApprovalTable.tableName,
+          },
+
+          bundling: {
+            minify: false,
+            sourceMap: true,
+          },
+        },
+      );
+
+    /*
+     * ============================================================
+     * Lambda - Get Approval By Token
+     * ============================================================
+     */
+
+    const getApprovalByTokenLambda =
+      new nodejs.NodejsFunction(
+        this,
+        'GetApprovalByTokenLambda',
+        {
+          runtime:
+            lambda.Runtime.NODEJS_24_X,
+
+          entry: path.join(
+            __dirname,
+            '../../backend/src/handlers/getApprovalByToken.ts',
+          ),
+
+          handler: 'handler',
+
+          environment: {
+            PURCHASE_APPROVAL_TABLE_NAME:
+              purchaseApprovalTable.tableName,
+          },
+
+          bundling: {
+            minify: false,
+            sourceMap: true,
+          },
+        },
+      );
+
+    /*
+     * ============================================================
+     * Lambda - Validate Approval OTP
+     * ============================================================
+     */
+
+    const validateApprovalOtpLambda =
+      new nodejs.NodejsFunction(
+        this,
+        'ValidateApprovalOtpLambda',
+        {
+          runtime:
+            lambda.Runtime.NODEJS_24_X,
+
+          entry: path.join(
+            __dirname,
+            '../../backend/src/handlers/validateApprovalOtp.ts',
+          ),
+
+          handler: 'handler',
+
+          environment: {
+            PURCHASE_APPROVAL_TABLE_NAME:
+              purchaseApprovalTable.tableName,
+          },
+
+          bundling: {
+            minify: false,
+            sourceMap: true,
+          },
+        },
+      );
+
+    /*
+     * ============================================================
+     * Lambda - Process Approval Decision
+     * ============================================================
+     */
+
+    const processApprovalDecisionLambda =
+      new nodejs.NodejsFunction(
+        this,
+        'ProcessApprovalDecisionLambda',
+        {
+          runtime:
+            lambda.Runtime.NODEJS_24_X,
+
+          entry: path.join(
+            __dirname,
+            '../../backend/src/handlers/processApprovalDecision.ts',
+          ),
+
+          handler: 'handler',
+
+          environment: {
+            PURCHASE_APPROVAL_TABLE_NAME:
+              purchaseApprovalTable.tableName,
+          },
+
+          bundling: {
+            minify: false,
+            sourceMap: true,
+          },
+        },
+      );
+
+    /*
+     * ============================================================
+     * DynamoDB permissions
+     * ============================================================
+     */
+
+    purchaseApprovalTable.grantReadWriteData(
+      createPurchaseRequestLambda,
+    );
+
+    purchaseApprovalTable.grantReadWriteData(
+      getApprovalByTokenLambda,
+    );
+
+    purchaseApprovalTable.grantReadWriteData(
+      validateApprovalOtpLambda,
+    );
+
+    purchaseApprovalTable.grantReadWriteData(
+      processApprovalDecisionLambda,
+    );
+
+    /*
+     * ============================================================
+     * API Gateway
+     * ============================================================
+     */
+
+    const api =
+      new apigateway.RestApi(
+        this,
+        'PurchaseApprovalApi',
+        {
+          restApiName:
+            'Purchase Approval API',
+
+          description:
+            'Purchase approval platform API',
+        },
+      );
+
+    /*
+     * ============================================================
+     * POST /purchase-requests
+     * ============================================================
+     */
+
+    const purchaseRequests =
+      api.root.addResource(
+        'purchase-requests',
+      );
+
+    purchaseRequests.addMethod(
+      'POST',
+      new apigateway.LambdaIntegration(
+        createPurchaseRequestLambda,
+      ),
+    );
+
+    /*
+     * ============================================================
+     * /approvals/{token}
+     * ============================================================
+     */
+
+    const approvals =
+      api.root.addResource(
+        'approvals',
+      );
+
+    const approvalByToken =
+      approvals.addResource(
+        '{token}',
+      );
+
+    /*
+     * GET /approvals/{token}
+     */
+
+    approvalByToken.addMethod(
+      'GET',
+      new apigateway.LambdaIntegration(
+        getApprovalByTokenLambda,
+      ),
+    );
+
+    /*
+     * ============================================================
+     * POST /approvals/{token}/otp
+     * ============================================================
+     */
+
+    const otp =
+      approvalByToken.addResource(
+        'otp',
+      );
+
+    otp.addMethod(
+      'POST',
+      new apigateway.LambdaIntegration(
+        validateApprovalOtpLambda,
+      ),
+    );
+
+    /*
+     * ============================================================
+     * POST /approvals/{token}/decision
+     * ============================================================
+     */
+
+    const decision =
+      approvalByToken.addResource(
+        'decision',
+      );
+
+    decision.addMethod(
+      'POST',
+      new apigateway.LambdaIntegration(
+        processApprovalDecisionLambda,
+      ),
+    );
+
+    /*
+     * ============================================================
+     * Outputs
+     * ============================================================
+     */
 
     new cdk.CfnOutput(
       this,
@@ -101,6 +366,15 @@ export class InfrastructureStack extends cdk.Stack {
       'ApproverIdIndexName',
       {
         value: 'ApproverIdIndex',
+      },
+    );
+
+    new cdk.CfnOutput(
+      this,
+      'PurchaseApprovalApiUrl',
+      {
+        value:
+          api.url,
       },
     );
   }

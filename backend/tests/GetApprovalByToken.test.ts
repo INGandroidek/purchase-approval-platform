@@ -6,10 +6,12 @@ import {
 
 import { Approver } from '../src/domain/entities/Approver.js';
 import { PurchaseRequest } from '../src/domain/entities/PurchaseRequest.js';
+
 import { ApprovalStatus } from '../src/domain/enums/ApprovalStatus.js';
 import { PurchaseStatus } from '../src/domain/enums/PurchaseStatus.js';
 
 import { ApproverRepository } from '../src/application/ports/ApproverRepository.js';
+
 import { PurchaseRequestRepository } from '../src/application/ports/PurchaseRequestRepository.js';
 
 import { GetApprovalByToken } from '../src/application/use-cases/GetApprovalByToken.js';
@@ -35,14 +37,14 @@ class InMemoryApproverRepository
 
   async findById(
     id: string,
-    ): Promise<Approver | null> {
+  ): Promise<Approver | null> {
     return (
-        [...this.approvers.values()].find(
+      [...this.approvers.values()].find(
         (approver) =>
-            approver.id === id,
-        ) ?? null
+          approver.id === id,
+      ) ?? null
     );
-    }
+  }
 
   async findByToken(
     token: string,
@@ -123,6 +125,29 @@ class InMemoryPurchaseRequestRepository
         ({ purchaseRequest }) =>
           purchaseRequest,
       );
+  }
+
+  async update(
+    purchaseRequest: PurchaseRequest,
+  ): Promise<void> {
+    const existing =
+      this.requests.get(
+        purchaseRequest.id,
+      );
+
+    if (!existing) {
+      throw new Error(
+        'Purchase request not found',
+      );
+    }
+
+    this.requests.set(
+      purchaseRequest.id,
+      {
+        ...existing,
+        purchaseRequest,
+      },
+    );
   }
 }
 

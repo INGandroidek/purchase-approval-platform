@@ -17,4 +17,8 @@ export interface PurchaseRequestRepository {
   findByRequesterEmail(
     email: string,
   ): Promise<PurchaseRequest[]>;
+
+  update(
+    purchaseRequest: PurchaseRequest,
+  ): Promise<void>;
 }

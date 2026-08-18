@@ -47,7 +47,26 @@ class InMemoryPurchaseRequestRepository
       )
       .map(({ purchaseRequest }) => purchaseRequest);
   }
+
+  async update(
+    purchaseRequest: PurchaseRequest,
+  ): Promise<void> {
+    const existing =
+      this.requests.get(
+        purchaseRequest.id,
+      );
+
+    this.requests.set(
+      purchaseRequest.id,
+      {
+        purchaseRequest,
+        approvers:
+          existing?.approvers ?? [],
+      },
+    );
 }
+}
+
 
 class FakeTokenGenerator implements TokenGenerator {
   private counter = 0;
