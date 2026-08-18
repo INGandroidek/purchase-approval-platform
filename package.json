@@ -1,0 +1,11 @@
+{
+  "name": "purchase-approval-platform",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Serverless purchase approval platform with chained digital signatures",
+  "scripts": {
+    "build": "pnpm -r build",
+    "test": "pnpm -r test",
+    "test:coverage": "pnpm -r test:coverage"
+  }
+}

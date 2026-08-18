@@ -1,0 +1,9 @@
+packages:
+  - "backend"
+  - "frontend"
+  - "infrastructure"
+allowBuilds:
+  '@swc/core': true
+  esbuild: true
+  serverless: false
+  unrs-resolver: true
