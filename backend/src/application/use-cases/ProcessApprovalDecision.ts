@@ -1,10 +1,9 @@
-import { ApproverRepository } from '../ports/ApproverRepository.js';
 import { PurchaseRequestRepository } from '../ports/PurchaseRequestRepository.js';
-
+import { ApproverRepository } from '../ports/ApproverRepository.js';
 import { Approver } from '../../domain/entities/Approver.js';
-
 import { ApprovalStatus } from '../../domain/enums/ApprovalStatus.js';
 import { PurchaseStatus } from '../../domain/enums/PurchaseStatus.js';
+import { PurchaseRequest } from '../../domain/entities/PurchaseRequest.js';
 
 export type ApprovalDecision =
   | 'APPROVED'
@@ -15,13 +14,22 @@ export interface ProcessedApproval {
   requestId: string;
   status: ApprovalStatus;
   signedAt: string;
+  pdfKey?: string;
   purchaseRequestStatus: PurchaseStatus;
+}
+
+export interface PurchaseApprovalPdfGenerator {
+  generateAndUpload(
+    purchaseRequest: PurchaseRequest,
+    approvers: Approver[],
+  ): Promise<string>;
 }
 
 export class ProcessApprovalDecision {
   constructor(
     private readonly approverRepository: ApproverRepository,
     private readonly purchaseRequestRepository: PurchaseRequestRepository,
+    private readonly pdfService?: PurchaseApprovalPdfGenerator,
   ) {}
 
   async execute(
@@ -54,10 +62,6 @@ export class ProcessApprovalDecision {
       );
     }
 
-    /*
-     * Load the purchase request before allowing
-     * any approval decision.
-     */
     const result =
       await this.purchaseRequestRepository.findById(
         approver.requestId,
@@ -74,11 +78,6 @@ export class ProcessApprovalDecision {
       approvers,
     } = result;
 
-    /*
-     * A purchase request is immutable from the
-     * approval perspective once it has been
-     * completed or rejected.
-     */
     if (
       purchaseRequest.status !==
       PurchaseStatus.PENDING
@@ -88,20 +87,12 @@ export class ProcessApprovalDecision {
       );
     }
 
-    /*
-     * The approver must verify the OTP before
-     * being allowed to make an approval decision.
-     */
     if (!approver.otpVerifiedAt) {
       throw new Error(
         'OTP verification is required',
       );
     }
 
-    /*
-     * The OTP verification must have happened
-     * while the OTP was still valid.
-     */
     const otpVerificationTime =
       new Date(
         approver.otpVerifiedAt,
@@ -121,9 +112,6 @@ export class ProcessApprovalDecision {
       );
     }
 
-    /*
-     * An approver can make only one decision.
-     */
     if (
       approver.status !==
       ApprovalStatus.PENDING
@@ -138,9 +126,6 @@ export class ProcessApprovalDecision {
         ? approver.sign()
         : approver.reject();
 
-    /*
-     * Persist the approver decision.
-     */
     await this.approverRepository.update(
       updatedApprover,
     );
@@ -148,24 +133,12 @@ export class ProcessApprovalDecision {
     let updatedPurchaseRequest =
       purchaseRequest;
 
-    /*
-     * A single rejection immediately rejects
-     * the entire purchase request.
-     */
     if (
       decision === 'REJECTED'
     ) {
       updatedPurchaseRequest =
         purchaseRequest.reject();
     } else {
-      /*
-       * The purchase request is completed only
-       * when every approver has signed.
-       *
-       * The repository contains the previous
-       * state of the current approver, so the
-       * updated approver is explicitly used here.
-       */
       const allApprovalsCompleted =
         approvers.every(
           (item: Approver) =>
@@ -182,10 +155,6 @@ export class ProcessApprovalDecision {
       }
     }
 
-    /*
-     * Persist the purchase request only when
-     * its status actually changes.
-     */
     if (
       updatedPurchaseRequest.status !==
       purchaseRequest.status
@@ -195,12 +164,32 @@ export class ProcessApprovalDecision {
       );
     }
 
+    let pdfKey: string | undefined;
+
+    if (
+      updatedPurchaseRequest.status ===
+        PurchaseStatus.COMPLETED &&
+      this.pdfService
+    ) {
+      pdfKey =
+        await this.pdfService.generateAndUpload(
+          updatedPurchaseRequest,
+          approvers.map(
+            (item: Approver) =>
+              item.id === updatedApprover.id
+                ? updatedApprover
+                : item,
+          ),
+        );
+    }
+
     return {
       approverId: updatedApprover.id,
       requestId: updatedApprover.requestId,
       status: updatedApprover.status,
       signedAt:
         updatedApprover.signedAt!,
+      pdfKey,
       purchaseRequestStatus:
         updatedPurchaseRequest.status,
     };

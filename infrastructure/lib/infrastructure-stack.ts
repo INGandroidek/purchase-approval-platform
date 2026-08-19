@@ -1,5 +1,6 @@
 import * as cdk from 'aws-cdk-lib';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
+import * as s3 from 'aws-cdk-lib/aws-s3';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as apigateway from 'aws-cdk-lib/aws-apigateway';
 import * as nodejs from 'aws-cdk-lib/aws-lambda-nodejs';
@@ -13,6 +14,32 @@ export class InfrastructureStack extends cdk.Stack {
     props?: cdk.StackProps,
   ) {
     super(scope, id, props);
+
+    /*
+     * ============================================================
+     * S3 - Approval PDFs
+     * ============================================================
+     */
+
+    const purchaseApprovalPdfBucket =
+      new s3.Bucket(
+        this,
+        'PurchaseApprovalPdfBucket',
+        {
+          blockPublicAccess:
+            s3.BlockPublicAccess.BLOCK_ALL,
+
+          encryption:
+            s3.BucketEncryption.S3_MANAGED,
+
+          enforceSSL: true,
+
+          removalPolicy:
+            cdk.RemovalPolicy.DESTROY,
+
+          autoDeleteObjects: true,
+        },
+      );
 
     /*
      * ============================================================
@@ -207,6 +234,9 @@ export class InfrastructureStack extends cdk.Stack {
           environment: {
             PURCHASE_APPROVAL_TABLE_NAME:
               purchaseApprovalTable.tableName,
+
+            PURCHASE_APPROVAL_PDF_BUCKET_NAME:
+              purchaseApprovalPdfBucket.bucketName,
           },
 
           bundling: {
@@ -235,6 +265,16 @@ export class InfrastructureStack extends cdk.Stack {
     );
 
     purchaseApprovalTable.grantReadWriteData(
+      processApprovalDecisionLambda,
+    );
+
+    /*
+     * ============================================================
+     * S3 permissions
+     * ============================================================
+     */
+
+    purchaseApprovalPdfBucket.grantPut(
       processApprovalDecisionLambda,
     );
 
@@ -375,6 +415,15 @@ export class InfrastructureStack extends cdk.Stack {
       {
         value:
           api.url,
+      },
+    );
+
+    new cdk.CfnOutput(
+      this,
+      'PurchaseApprovalPdfBucketName',
+      {
+        value:
+          purchaseApprovalPdfBucket.bucketName,
       },
     );
   }

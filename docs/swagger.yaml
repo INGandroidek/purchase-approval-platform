@@ -1,0 +1,304 @@
+openapi: 3.0.3
+info:
+  title: Purchase Approval Platform API
+  version: 1.0.0
+  description: |
+    REST API for creating purchase requests and completing multi-approver workflows.
+    The deployed assessment environment exposes the API through AWS API Gateway and AWS Lambda.
+servers:
+  - url: https://jguzyqqsw9.execute-api.us-east-1.amazonaws.com/prod
+    description: Deployed assessment environment
+
+tags:
+  - name: Purchase Requests
+  - name: Approvals
+
+paths:
+  /purchase-requests:
+    post:
+      tags: [Purchase Requests]
+      summary: Create a purchase request
+      description: Creates a purchase request and one or more pending approver records.
+      operationId: createPurchaseRequest
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePurchaseRequestInput'
+            example:
+              title: Laptop para desarrollo
+              description: Compra de laptop para el equipo de ingeniería
+              amount: 5000000
+              requesterName: Diego Uribe
+              requesterEmail: diego@example.com
+              approvers:
+                - name: Approver One
+                  email: approver1@example.com
+                  role: MANAGER
+                - name: Approver Two
+                  email: approver2@example.com
+                  role: FINANCE
+                - name: Approver Three
+                  email: approver3@example.com
+                  role: DIRECTOR
+      responses:
+        '201':
+          description: Purchase request created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreatePurchaseRequestResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /approvals/{token}:
+    get:
+      tags: [Approvals]
+      summary: Get approval by token
+      operationId: getApprovalByToken
+      parameters:
+        - $ref: '#/components/parameters/Token'
+      responses:
+        '200':
+          description: Approval information
+          content:
+            application/json:
+              schema:
+                type: object
+                description: Approval response containing the associated request and approver information.
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /approvals/{token}/otp:
+    post:
+      tags: [Approvals]
+      summary: Validate approval OTP
+      operationId: validateApprovalOtp
+      parameters:
+        - $ref: '#/components/parameters/Token'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OtpRequest'
+            example:
+              otp: '259031'
+      responses:
+        '200':
+          description: OTP successfully validated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  approverId:
+                    type: string
+                    format: uuid
+                  requestId:
+                    type: string
+                    format: uuid
+                  name:
+                    type: string
+                  role:
+                    type: string
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /approvals/{token}/decision:
+    post:
+      tags: [Approvals]
+      summary: Register approval decision
+      operationId: processApprovalDecision
+      parameters:
+        - $ref: '#/components/parameters/Token'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DecisionRequest'
+            examples:
+              approved:
+                value:
+                  decision: APPROVED
+              rejected:
+                value:
+                  decision: REJECTED
+      responses:
+        '200':
+          description: Decision registered
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DecisionResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+components:
+  parameters:
+    Token:
+      name: token
+      in: path
+      required: true
+      description: Unique cryptographic approval token generated for the approver.
+      schema:
+        type: string
+        minLength: 32
+
+  responses:
+    BadRequest:
+      description: Invalid request or business rule violation
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+  schemas:
+    ApproverInput:
+      type: object
+      required: [name, email, role]
+      properties:
+        name:
+          type: string
+        email:
+          type: string
+          format: email
+        role:
+          type: string
+          example: MANAGER
+
+    CreatePurchaseRequestInput:
+      type: object
+      required:
+        - title
+        - description
+        - amount
+        - requesterName
+        - requesterEmail
+        - approvers
+      properties:
+        title:
+          type: string
+        description:
+          type: string
+        amount:
+          type: number
+          format: double
+          minimum: 0
+        requesterName:
+          type: string
+        requesterEmail:
+          type: string
+          format: email
+        approvers:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/ApproverInput'
+
+    PurchaseRequest:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        description:
+          type: string
+        amount:
+          type: number
+        requesterName:
+          type: string
+        requesterEmail:
+          type: string
+          format: email
+        status:
+          type: string
+          example: PENDING
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    Approver:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        email:
+          type: string
+          format: email
+        role:
+          type: string
+        token:
+          type: string
+        otp:
+          type: string
+          description: Test/assessment credential returned to allow end-to-end verification.
+        otpExpiresAt:
+          type: string
+          format: date-time
+        status:
+          type: string
+          example: PENDING
+
+    CreatePurchaseRequestResponse:
+      type: object
+      properties:
+        request:
+          $ref: '#/components/schemas/PurchaseRequest'
+        approvers:
+          type: array
+          items:
+            $ref: '#/components/schemas/Approver'
+
+    OtpRequest:
+      type: object
+      required: [otp]
+      properties:
+        otp:
+          type: string
+          minLength: 6
+          maxLength: 6
+          pattern: '^\\d{6}$'
+
+    DecisionRequest:
+      type: object
+      required: [decision]
+      properties:
+        decision:
+          type: string
+          enum: [APPROVED, REJECTED]
+
+    DecisionResponse:
+      type: object
+      properties:
+        approverId:
+          type: string
+          format: uuid
+        requestId:
+          type: string
+          format: uuid
+        status:
+          type: string
+          example: SIGNED
+        signedAt:
+          type: string
+          format: date-time
+        purchaseRequestStatus:
+          type: string
+          example: PENDING
+
+    ErrorResponse:
+      type: object
+      properties:
+        message:
+          type: string

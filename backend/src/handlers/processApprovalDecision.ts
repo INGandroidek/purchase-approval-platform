@@ -4,9 +4,14 @@ import {
 } from 'aws-lambda';
 
 import { corsHeaders } from './cors.js';
+
 import { ProcessApprovalDecision } from '../application/use-cases/ProcessApprovalDecision.js';
+
 import { DynamoDBApproverRepository } from '../infrastructure/repositories/DynamoDBApproverRepository.js';
+
 import { DynamoDBPurchaseRequestRepository } from '../infrastructure/repositories/DynamoDBPurchaseRequestRepository.js';
+
+import { PurchaseApprovalPdfService } from '../infrastructure/services/PurchaseApprovalPdfService.js';
 
 const approverRepository =
   new DynamoDBApproverRepository();
@@ -14,10 +19,14 @@ const approverRepository =
 const purchaseRequestRepository =
   new DynamoDBPurchaseRequestRepository();
 
+const pdfService =
+  new PurchaseApprovalPdfService();
+
 const processApprovalDecision =
   new ProcessApprovalDecision(
     approverRepository,
     purchaseRequestRepository,
+    pdfService,
   );
 
 export async function handler(
@@ -49,9 +58,8 @@ export async function handler(
       };
     }
 
-    const input = JSON.parse(
-      event.body,
-    );
+    const input =
+      JSON.parse(event.body);
 
     const result =
       await processApprovalDecision.execute(
